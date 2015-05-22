@@ -1,7 +1,8 @@
 import argparse
 import tempfile
 import traceback
-from gi.repository import Notify
+import datetime
+from gi.repository import Notify, GLib
 import requests
 import time
 import sys
@@ -73,7 +74,15 @@ def notify_stream(stream):
             icon.name
         )
         n.set_category('presence.online')
-        n.show()
+
+        try:
+            n.show()
+        except GLib.Error:
+            # sometimes this happens
+            # g-dbus-error-quark: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown
+            Notify.uninit()
+            Notify.init('twnotify')
+            n.show()
 
 
 def mainloop(username, interval=120):
@@ -126,6 +135,7 @@ def main():
         except Exception:
             if ns.logfile:
                 with open(ns.logfile, 'a') as f:
+                    f.write(datetime.datetime.now().isoformat(sep=' '))
                     traceback.print_exc(file=f)
 
             traceback.print_exc(file=sys.stderr)
