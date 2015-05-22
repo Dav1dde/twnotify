@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=twnotify
+GenericName=Twitch Notify
+Comment=Get alerted if one of your favorite streamers goes online
+Terminal=false
+Type=Application
+StartupNotify=false
+Categories=Utility;
+Icon=gnome-panel-launcher
+Exec=twnotify
