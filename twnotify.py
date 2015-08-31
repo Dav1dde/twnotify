@@ -1,16 +1,29 @@
+from gi.repository import Notify, GLib
 import argparse
 import tempfile
 import traceback
 import datetime
-from gi.repository import Notify, GLib
 import requests
 import time
 import sys
+
+if sys.version_info >= (3, 0):
+    from itertools import zip_longest as izip_longest
+else:
+    from itertools import izip_longest
 
 
 MIME_TYPE = 'application/vnd.twitchtv.v3+json'
 FOLLOWS_ENDPOINT = 'https://api.twitch.tv/kraken/users/{0}/follows/channels'
 STREAM_ENDPOINT = 'https://api.twitch.tv/kraken/streams/{0}'
+STREAMS_ENDPOINT = 'https://api.twitch.tv/kraken/streams/'
+
+
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
+    args = [iter(iterable)] * n
+    return izip_longest(fillvalue=fillvalue, *args)
 
 
 def get_follows(username):
@@ -47,6 +60,20 @@ def get_stream(username):
     j = response.json()
 
     return j['stream']
+
+
+def get_streams(follows):
+    if len(follows) > 100:
+        raise ValueError('Maximum of 100 follows')
+    follows = ','.join(f['channel']['name'] for f in follows if f)
+    response = requests.get(
+        STREAMS_ENDPOINT, params=dict(channel=follows),
+        headers=dict(accept=MIME_TYPE)
+    )
+    response.raise_for_status()
+    j = response.json()
+
+    return j['streams']
 
 
 def download(url, fd):
@@ -86,20 +113,25 @@ def notify_stream(stream):
 
 
 def mainloop(username, interval=120):
-    follows = get_follows(username)
-    for follow in follows:
+    follows = dict()
+    for follow in get_follows(username):
         follow['__offline'] = False
+        follows[follow['channel']['name']] = follow
 
     while True:
-        for follow in follows:
-            stream = get_stream(follow['channel']['name'])
-            if stream is None:
-                follow['__offline'] = True
-                continue
+        for fs in grouper(follows.values(), 100):
+            streams = get_streams(fs)
 
-            if follow.get('__offline', True):
-                notify_stream(stream)
-            follow['__offline'] = False
+            for stream in streams:
+                follow = follows[stream['channel']['name']]
+                if stream is None:
+                    follow['__offline'] = True
+                    continue
+
+                if follow.get('__offline', True):
+                    notify_stream(stream)
+                follow['__offline'] = False
+
         time.sleep(interval)
 
 
